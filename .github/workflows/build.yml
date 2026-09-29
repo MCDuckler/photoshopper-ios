@@ -1,0 +1,109 @@
+# Build Photoshopper3000 for iPhone, unsigned, and publish it for SideStore.
+#
+# SideStore signs the app on the phone with your own Apple ID, so no certificates,
+# profiles or Apple credentials ever touch this workflow.
+#
+# Runs on demand (Actions tab / `gh workflow run build.yml`) and on `v*` tags.
+# Each run: build → Release with the .ipa → regenerate the SideStore source on the
+# gh-pages branch (https://mcduckler.github.io/photoshopper-ios/apps.json).
+name: iPhone app
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  ipa:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pick Xcode
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)"
+          xcodebuild -version
+
+      - name: Generate the project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Version
+        id: v
+        run: |
+          # Marketing version from the tag (v0.2.0 → 0.2.0), else from project.yml.
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then ver="${GITHUB_REF#refs/tags/v}"; else ver="$(grep MARKETING_VERSION project.yml | head -1 | sed 's/.*"\(.*\)".*/\1/')"; fi
+          # Build number = UTC stamp: always increasing, so SideStore sees updates.
+          build="$(date -u +%Y%m%d%H%M)"
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "tag=ios-$ver-$build" >> "$GITHUB_OUTPUT"
+
+      - name: Build, unsigned
+        run: |
+          set -o pipefail
+          xcodebuild -project Photoshopper3000.xcodeproj -scheme Photoshopper3000 \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            MARKETING_VERSION="${{ steps.v.outputs.version }}" \
+            CURRENT_PROJECT_VERSION="${{ steps.v.outputs.build }}" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build > build.log 2>&1 || { grep -E "error:|\*\* BUILD" build.log | head -60; echo "::error::build failed"; exit 1; }
+          grep -E "warning:|\*\* BUILD" build.log | grep -v "appintentsmetadataprocessor" | head -40 || true
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: build-log
+          path: build.log
+
+      - name: Wrap as ipa
+        run: |
+          # An ipa is a zip with the .app inside a folder called Payload.
+          mkdir -p out/Payload
+          cp -R build/Build/Products/Release-iphoneos/Photoshopper3000.app out/Payload/
+          cd out && zip -qry Photoshopper3000.ipa Payload && ls -lh Photoshopper3000.ipa
+          shasum -a 256 Photoshopper3000.ipa | cut -d' ' -f1 > sha256.txt
+          stat -f%z Photoshopper3000.ipa > size.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Photoshopper3000-ipa
+          path: out/Photoshopper3000.ipa
+          retention-days: 30
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.v.outputs.tag }}" out/Photoshopper3000.ipa \
+            --title "Photoshopper3000 ${{ steps.v.outputs.version }} (${{ steps.v.outputs.build }})" \
+            --notes "Unsigned build of ${GITHUB_SHA::7}. Install through SideStore — add the source https://mcduckler.github.io/photoshopper-ios/apps.json"
+
+      - name: Update the SideStore source
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${{ steps.v.outputs.tag }}/Photoshopper3000.ipa"
+          python3 source/make_source.py \
+            --version "${{ steps.v.outputs.version }}" --build "${{ steps.v.outputs.build }}" \
+            --url "$url" --size "$(cat out/size.txt)" --sha256 "$(cat out/sha256.txt)" \
+            --out out/apps.json
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git fetch origin gh-pages || true
+          if git show-ref --verify --quiet refs/remotes/origin/gh-pages; then
+            git worktree add pages origin/gh-pages && (cd pages && git checkout -B gh-pages)
+          else
+            git worktree add --detach pages && (cd pages && git checkout --orphan gh-pages && git rm -rfq . )
+          fi
+          cp out/apps.json pages/apps.json
+          cp source/icon.png pages/icon.png
+          cp source/index.html pages/index.html
+          touch pages/.nojekyll
+          cd pages && git add -A && git commit -qm "Source: ${{ steps.v.outputs.version }} (${{ steps.v.outputs.build }})" && git push -f origin gh-pages

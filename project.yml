@@ -1,0 +1,53 @@
+# XcodeGen spec — `xcodegen` regenerates Photoshopper3000.xcodeproj from this.
+name: Photoshopper3000
+options:
+  bundleIdPrefix: dance.duckduck
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    # Built unsigned on CI; SideStore signs on the phone.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: ""
+    CODE_SIGNING_REQUIRED: "NO"
+    CODE_SIGNING_ALLOWED: "NO"
+    DEVELOPMENT_TEAM: ""
+targets:
+  Photoshopper3000:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: Resources/Assets.xcassets
+    info:
+      path: Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Photoshopper3000
+        CFBundleName: Photoshopper3000
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        NSPhotoLibraryUsageDescription: Photoshopper3000 puts your rendered photos into a Photos album (and replaces a photo there when you re-edit it).
+        NSPhotoLibraryAddUsageDescription: Photoshopper3000 adds your rendered photos to a Photos album.
+        NSLocalNetworkUsageDescription: Photoshopper3000 finds your Photoshopper server on the local network.
+        NSBonjourServices: [_photoedit._tcp]
+        NSCameraUsageDescription: Scan the pairing QR code shown by the Photoshopper server.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+          NSAllowsLocalNetworking: true
+        UIBackgroundModes: [fetch, processing]
+        BGTaskSchedulerPermittedIdentifiers: [dance.duckduck.p3k.refresh, dance.duckduck.p3k.sync]
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dance.duckduck.p3k
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_USER_SCRIPT_SANDBOXING: "NO"
