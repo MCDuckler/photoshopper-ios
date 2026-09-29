@@ -25,9 +25,9 @@ struct Star: Shape {
         let c = CGPoint(x: r.midX, y: r.midY)
         let outer = min(r.width, r.height) / 2, inner = outer * 0.46
         for i in 0..<10 {
-            let a = -Double.pi / 2 + Double(i) * .pi / 5
-            let rad = i % 2 == 0 ? outer : inner
-            let pt = CGPoint(x: c.x + rad * cos(a), y: c.y + rad * sin(a))
+            let a = -CGFloat.pi / 2 + CGFloat(i) * CGFloat.pi / 5
+            let rad: CGFloat = i % 2 == 0 ? outer : inner
+            let pt = CGPoint(x: c.x + rad * CoreGraphics.cos(a), y: c.y + rad * CoreGraphics.sin(a))
             if i == 0 { p.move(to: pt) } else { p.addLine(to: pt) }
         }
         p.closeSubpath()
