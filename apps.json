@@ -15,11 +15,21 @@
       "iconURL": "https://mcduckler.github.io/photoshopper-ios/icon.png",
       "tintColor": "#E4002B",
       "category": "photo-video",
-      "version": "0.2.0",
-      "versionDate": "2026-09-29T16:29:30Z",
-      "downloadURL": "https://github.com/MCDuckler/photoshopper-ios/releases/download/ios-0.2.0-202609291628/Photoshopper3000.ipa",
-      "size": 421857,
+      "version": "0.3.0",
+      "versionDate": "2026-09-29T16:35:00Z",
+      "downloadURL": "https://github.com/MCDuckler/photoshopper-ios/releases/download/ios-0.3.0-202609291631/Photoshopper3000.ipa",
+      "size": 452173,
       "versions": [
+        {
+          "version": "0.3.0",
+          "buildVersion": "202609291631",
+          "date": "2026-09-29T16:35:00Z",
+          "localizedDescription": "Build 202609291631",
+          "downloadURL": "https://github.com/MCDuckler/photoshopper-ios/releases/download/ios-0.3.0-202609291631/Photoshopper3000.ipa",
+          "size": 452173,
+          "sha256": "32d61cb686840b873dcb47ea55ce41f58a4cd58ea3f1f964c539cc9862dc26b4",
+          "minOSVersion": "17.0"
+        },
         {
           "version": "0.2.0",
           "buildVersion": "202609291628",
