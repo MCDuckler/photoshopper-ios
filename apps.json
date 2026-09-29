@@ -1,0 +1,46 @@
+{
+  "name": "Photoshopper3000",
+  "identifier": "dance.duckduck.p3k.source",
+  "subtitle": "Rendered photos into your Photos library",
+  "website": "https://github.com/MCDuckler/photoshopper-ios",
+  "iconURL": "https://mcduckler.github.io/photoshopper-ios/icon.png",
+  "tintColor": "#E4002B",
+  "apps": [
+    {
+      "name": "Photoshopper3000",
+      "bundleIdentifier": "dance.duckduck.p3k",
+      "developerName": "MCDuckler",
+      "subtitle": "Sync edits to iCloud Photos",
+      "localizedDescription": "Carries the photos you select in Photoshopper3000 into a Photos album, so iCloud Photos has them everywhere. Re-edits replace the old version.",
+      "iconURL": "https://mcduckler.github.io/photoshopper-ios/icon.png",
+      "tintColor": "#E4002B",
+      "category": "photo-video",
+      "version": "0.1.0",
+      "versionDate": "2026-09-29T16:19:54Z",
+      "downloadURL": "https://github.com/MCDuckler/photoshopper-ios/releases/download/ios-0.1.0-202609291619/Photoshopper3000.ipa",
+      "size": 248129,
+      "versions": [
+        {
+          "version": "0.1.0",
+          "buildVersion": "202609291619",
+          "date": "2026-09-29T16:19:54Z",
+          "localizedDescription": "Build 202609291619",
+          "downloadURL": "https://github.com/MCDuckler/photoshopper-ios/releases/download/ios-0.1.0-202609291619/Photoshopper3000.ipa",
+          "size": 248129,
+          "sha256": "42f026917bff5a77a377dd4c2556ef12e3fbcb63cdd75477ee1c6ca206512e89",
+          "minOSVersion": "17.0"
+        }
+      ],
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {
+          "NSPhotoLibraryUsageDescription": "Puts your rendered photos into a Photos album and replaces them when you re-edit.",
+          "NSLocalNetworkUsageDescription": "Finds your Photoshopper server on the local network.",
+          "NSCameraUsageDescription": "Scans the server's pairing QR code."
+        }
+      },
+      "screenshots": []
+    }
+  ],
+  "news": []
+}
