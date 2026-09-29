@@ -37,7 +37,8 @@ jobs:
         id: v
         run: |
           # Marketing version from the tag (v0.2.0 → 0.2.0), else from project.yml.
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then ver="${GITHUB_REF#refs/tags/v}"; else ver="$(grep MARKETING_VERSION project.yml | head -1 | sed 's/.*"\(.*\)".*/\1/')"; fi
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then ver="${GITHUB_REF#refs/tags/v}"; else ver="$(grep -E '^ +MARKETING_VERSION: "' project.yml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"; fi
+          [[ "$ver" =~ ^[0-9]+(\.[0-9]+)*$ ]] || { echo "::error::bad version '$ver'"; exit 1; }
           # Build number = UTC stamp: always increasing, so SideStore sees updates.
           build="$(date -u +%Y%m%d%H%M)"
           echo "version=$ver" >> "$GITHUB_OUTPUT"
