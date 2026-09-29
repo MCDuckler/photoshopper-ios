@@ -9,11 +9,14 @@ struct RootView: View {
             if model.serverURL.isEmpty {
                 ConnectView(first: true)
             } else {
+                VStack(spacing: 0) {
+                if model.showUpdateBanner, let r = model.update { UpdateBanner(release: r) }
                 TabView(selection: $tab) {
                     LibraryView().tabItem { Label("Library", systemImage: "photo.on.rectangle") }.tag(0)
                     HomeView().tabItem { Label("Sync", systemImage: "arrow.triangle.2.circlepath") }.tag(1)
                     LogView().tabItem { Label("Activity", systemImage: "list.bullet") }.tag(2)
                     SettingsView().tabItem { Label("Settings", systemImage: "gearshape") }.tag(3)
+                }
                 }
             }
         }

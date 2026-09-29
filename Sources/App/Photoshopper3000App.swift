@@ -20,6 +20,7 @@ struct Photoshopper3000App: App {
             switch new {
             case .active:
                 Task { await model.syncIfDue(reason: "open") }
+                Task { await model.checkForUpdate() }
             case .background:
                 BackgroundSync.schedule()
             default:

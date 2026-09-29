@@ -41,8 +41,8 @@ struct SettingsView: View {
                 Section {
                     Button("Forget what was synced", role: .destructive) { confirmReset = true }
                 } footer: { Text("Nothing is deleted from Photos. The next sync re-adds every selected photo unless you re-scan first.") }
+                UpdateSection()
                 Section("About") {
-                    LabeledContent("Version", value: version)
                     LabeledContent("Device", value: ClientID.value)
                     Link("Source on GitHub", destination: URL(string: "https://github.com/MCDuckler/photoshopper-ios")!)
                 }

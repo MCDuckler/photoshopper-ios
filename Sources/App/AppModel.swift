@@ -19,6 +19,29 @@ final class AppModel: ObservableObject {
     @Published var lastSync: Date? = Settings.lastSync
     @Published var log: [LogLine] = LogStore.load()
 
+    @Published var update: Release?
+    @Published var checkingUpdate = false
+    @Published var lastUpdateCheck: Date?
+    @Published var dismissedBuild: String? = UserDefaults.standard.string(forKey: "dismissedBuild")
+
+    /// Quiet check: on launch and when coming back, at most every 6 h unless forced.
+    func checkForUpdate(force: Bool = false) async {
+        if !force, let last = lastUpdateCheck, Date().timeIntervalSince(last) < 6 * 3600 { return }
+        checkingUpdate = true
+        defer { checkingUpdate = false }
+        let r = await Updates.latest()
+        lastUpdateCheck = Date()
+        if let r { update = r }
+    }
+
+    var updateAvailable: Bool { update?.isNewer(than: Updates.running) ?? false }
+    var showUpdateBanner: Bool { updateAvailable && dismissedBuild != update?.build }
+
+    func dismissUpdate() {
+        dismissedBuild = update?.build
+        UserDefaults.standard.set(dismissedBuild, forKey: "dismissedBuild")
+    }
+
     private var discovery: Discovery?
 
     var api: API? {

@@ -104,6 +104,15 @@ jobs:
             git worktree add --detach pages && (cd pages && git checkout --orphan gh-pages && git rm -rfq . )
           fi
           cp out/apps.json pages/apps.json
+          # The app's own update check (Sources/App/Updates.swift) reads this.
+          python3 - "$url" <<'PY'
+          import json, sys, subprocess, datetime
+          notes = subprocess.run(["git", "log", "-1", "--format=%s"], capture_output=True, text=True).stdout.strip()
+          json.dump({"version": "${{ steps.v.outputs.version }}", "build": "${{ steps.v.outputs.build }}",
+                     "bytes": int(open("out/size.txt").read().strip()),
+                     "built": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                     "url": sys.argv[1], "notes": notes}, open("pages/latest.json", "w"), indent=2)
+          PY
           cp source/icon.png pages/icon.png
           cp source/index.html pages/index.html
           touch pages/.nojekyll
