@@ -56,7 +56,7 @@ struct API {
         return URLSession(configuration: c)
     }()
 
-    private func request(_ path: String, method: String = "GET", body: Data? = nil, timeout: TimeInterval = 20) -> URLRequest {
+    fileprivate func request(_ path: String, method: String = "GET", body: Data? = nil, timeout: TimeInterval = 20) -> URLRequest {
         var r = URLRequest(url: URL(string: base.absoluteString + path)!)
         r.httpMethod = method
         r.timeoutInterval = timeout
@@ -66,7 +66,7 @@ struct API {
         return r
     }
 
-    private func send(_ r: URLRequest) async throws -> (Data, HTTPURLResponse) {
+    fileprivate func send(_ r: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let (d, resp) = try await Self.session.data(for: r)
         guard let http = resp as? HTTPURLResponse else { throw APIError.status(0, "no response") }
         if http.statusCode == 409 { throw APIError.stale(String(data: d, encoding: .utf8) ?? "") }
@@ -107,4 +107,96 @@ enum ClientID {
         UserDefaults.standard.set(v, forKey: k)
         return v
     }()
+}
+
+// MARK: - Browsing
+
+struct PhotoItem: Decodable, Identifiable, Hashable {
+    let id: String
+    let filename: String?
+    let w: Int?
+    let h: Int?
+    let capture_dt: String?
+    var rating: Int
+    let has_edit: Bool
+    let edited_at: Double?
+    let camera: String?
+
+    var aspect: CGFloat {
+        guard let w, let h, w > 0, h > 0 else { return 1.5 }
+        return CGFloat(w) / CGFloat(h)
+    }
+    var monthKey: String { capture_dt.map { String($0.prefix(7)) } ?? "" }
+    var captureDate: Date? {
+        guard let s = capture_dt, s.count >= 19 else { return nil }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy:MM:dd HH:mm:ss"
+        return f.date(from: String(s.prefix(19)))
+    }
+}
+
+struct PhotoPage: Decodable { let next_cursor: String?; let items: [PhotoItem] }
+struct Album: Decodable, Identifiable, Hashable { let id: Int; let name: String; let count: Int; let published: Int? }
+struct Folder: Decodable, Identifiable, Hashable { let path: String; let count: Int; var id: String { path } }
+private struct Items<T: Decodable>: Decodable { let items: [T] }
+private struct IDs: Decodable { let ids: [String]; let total: Int }
+
+extension API {
+    private func json(_ obj: Any) -> Data { (try? JSONSerialization.data(withJSONObject: obj)) ?? Data("{}".utf8) }
+
+    func photos(query: String, cursor: String?) async throws -> PhotoPage {
+        var q = "limit=500"
+        if !query.isEmpty { q += "&" + query }
+        if let cursor { q += "&cursor=" + cursor }
+        let (d, _) = try await send(request("/api/photos?" + q, timeout: 40))
+        return try JSONDecoder().decode(PhotoPage.self, from: d)
+    }
+
+    func albums() async throws -> [Album] {
+        let (d, _) = try await send(request("/api/albums"))
+        return try JSONDecoder().decode(Items<Album>.self, from: d).items
+    }
+
+    func folders() async throws -> [Folder] {
+        let (d, _) = try await send(request("/api/folders"))
+        return try JSONDecoder().decode(Items<Folder>.self, from: d).items
+    }
+
+    func phoneIDs() async throws -> Set<String> {
+        let (d, _) = try await send(request("/api/photos/ids?phone=true"))
+        return Set(try JSONDecoder().decode(IDs.self, from: d).ids)
+    }
+
+    func addToPhone(_ ids: [String], variant: String) async throws {
+        _ = try await send(request("/api/sync/set", method: "POST", body: json(["photo_ids": ids, "variant": variant])))
+    }
+
+    func removeFromPhone(_ ids: [String]) async throws {
+        _ = try await send(request("/api/sync/set", method: "DELETE", body: json(["photo_ids": ids, "variant": "full"])))
+    }
+
+    func rate(_ id: String, _ rating: Int) async throws {
+        _ = try await send(request("/api/photos/\(id)", method: "PATCH", body: json(["rating": rating])))
+    }
+
+    /// Authenticated request for an image; the server sends immutable cache headers,
+    /// so URLCache keeps them across launches.
+    func imageRequest(_ path: String) -> URLRequest {
+        var r = request(path, timeout: 60)
+        r.cachePolicy = .returnCacheDataElseLoad
+        return r
+    }
+
+    func thumb(_ p: PhotoItem) -> URLRequest {
+        p.has_edit
+            ? imageRequest("/api/photos/\(p.id)/edited_thumb?size=512&v=\(Int(p.edited_at ?? 0))")
+            : imageRequest("/api/photos/\(p.id)/thumb?size=512")
+    }
+
+    func preview(_ p: PhotoItem) -> URLRequest {
+        p.has_edit
+            ? imageRequest("/api/photos/\(p.id)/edited_preview?long_edge=1600&v=\(Int(p.edited_at ?? 0))")
+            : imageRequest("/api/photos/\(p.id)/preview")
+    }
 }

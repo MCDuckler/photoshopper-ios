@@ -10,9 +10,10 @@ struct RootView: View {
                 ConnectView(first: true)
             } else {
                 TabView(selection: $tab) {
-                    HomeView().tabItem { Label("Sync", systemImage: "star") }.tag(0)
-                    LogView().tabItem { Label("Activity", systemImage: "list.bullet") }.tag(1)
-                    SettingsView().tabItem { Label("Settings", systemImage: "gearshape") }.tag(2)
+                    LibraryView().tabItem { Label("Library", systemImage: "photo.on.rectangle") }.tag(0)
+                    HomeView().tabItem { Label("Sync", systemImage: "arrow.triangle.2.circlepath") }.tag(1)
+                    LogView().tabItem { Label("Activity", systemImage: "list.bullet") }.tag(2)
+                    SettingsView().tabItem { Label("Settings", systemImage: "gearshape") }.tag(3)
                 }
             }
         }
@@ -41,7 +42,7 @@ struct HomeView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Theme.label("Photos album")
                         Text(Settings.albumName).font(.custom("Helvetica Neue", size: 26).weight(.bold))
-                        Theme.meta("Photos you select in Photoshopper (Library › Select › Phone) land here and upload through iCloud Photos. Re-edits replace the old version.")
+                        Theme.meta("Photos you pick in the Library tab (or in Photoshopper on the computer) land here and upload through iCloud Photos. Re-edits replace the old version.")
                     }
 
                     HStack(spacing: 22) {
