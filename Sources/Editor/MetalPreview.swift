@@ -14,7 +14,7 @@ enum PreviewParams {
     static let count = 72
 
     /// Recipe → shader inputs. `fullFrame` drops the crop (the crop tool shows the whole photo).
-    static func make(_ r: Recipe, srcAspect: Float, lutN: Int, original: Bool, fullFrame: Bool) -> (params: [Float], curve: [Float]) {
+    static func make(_ r: Recipe, aspect: Float, lutSize: Int, showOriginal: Bool, fullFrame: Bool) -> (params: [Float], curve: [Float]) {
         var p = [Float](repeating: 0, count: count)
         func f(_ k: String) -> Float { Float(r.num(k)) }
         p[exposure] = f("exposure"); p[brightness] = f("brightness"); p[contrast] = f("contrast")
@@ -24,21 +24,21 @@ enum PreviewParams {
         p[matte] = f("matte"); p[bw] = f("bw_amount")
         p[splitBalance] = f("split_balance")
         p[vigAmount] = f("vignette_amount"); p[vigFeather] = f("vignette_feather"); p[vigMid] = f("vignette_midpoint"); p[vigRound] = f("vignette_roundness")
-        p[srcAspect] = srcAspect
+        p[srcAspect] = aspect
         p[lutAmount] = Float(r.lutAmount)
-        p[lutN] = Float(lutN)
-        p[useLut] = r.lutName != nil && lutN > 1 && r.lutAmount > 0.001 ? 1 : 0
+        p[lutN] = Float(lutSize)
+        p[useLut] = r.lutName != nil && lutSize > 1 && r.lutAmount > 0.001 ? 1 : 0
         p[rotation] = Float(r.rotation)
-        p[original] = original ? 1 : 0
+        p[original] = showOriginal ? 1 : 0
 
         let sh = Hex.rgb(r.string("split_shadow_hex")), shs = r.num("split_shadow_sat")
         let hi = Hex.rgb(r.string("split_highlight_hex")), his = r.num("split_highlight_sat")
         if shs > 0 { p[splitSh] = Float((sh.0 - 0.5) * shs); p[splitSh + 1] = Float((sh.1 - 0.5) * shs); p[splitSh + 2] = Float((sh.2 - 0.5) * shs) }
         if his > 0 { p[splitHi] = Float((hi.0 - 0.5) * his); p[splitHi + 1] = Float((hi.1 - 0.5) * his); p[splitHi + 2] = Float((hi.2 - 0.5) * his) }
 
-        let c = fullFrame || original ? CGRect(x: 0, y: 0, width: 1, height: 1) : r.crop
+        let c = fullFrame || showOriginal ? CGRect(x: 0, y: 0, width: 1, height: 1) : r.crop
         p[crop] = Float(c.minX); p[crop + 1] = Float(c.minY); p[crop + 2] = Float(c.width); p[crop + 3] = Float(c.height)
-        if original { p[rotation] = 0 }
+        if showOriginal { p[rotation] = 0 }
 
         let hslV = r.nums("hsl")
         if hslV.contains(where: { abs($0) > 1e-4 }) {

@@ -222,7 +222,7 @@ final class EditorModel: ObservableObject {
     var showLive: Bool { liveReady && serverKey != displayKey }
 
     func shaderInputs(original: Bool) -> (params: [Float], curve: [Float]) {
-        PreviewParams.make(displayRecipe, srcAspect: Float(sourceAspect), lutN: renderer?.lutN ?? 0, original: original, fullFrame: cropping)
+        PreviewParams.make(displayRecipe, aspect: Float(sourceAspect), lutSize: renderer?.lutN ?? 0, showOriginal: original, fullFrame: cropping)
     }
 
     /// Call after any change to `recipe`. `history: true` records an undo step now
