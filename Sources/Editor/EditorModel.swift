@@ -13,31 +13,7 @@ enum EditCategory: String, CaseIterable, Identifiable {
         case .crop: return "crop.rotate"
         }
     }
-    var tools: [EditTool] {
-        var t: [EditTool] = []
-        func sliders(_ keys: [String]) { for k in keys { t.append(.slider(k)) } }
-        switch self {
-        case .light:
-            t.append(.auto)
-            t.append(.autoLight)
-            sliders(["exposure", "brightness", "highlights", "shadows", "whites", "blacks", "contrast"])
-            t.append(.curve)
-        case .color:
-            sliders(["wb_temp", "wb_tint", "saturation", "vibrance"])
-            t.append(.hsl)
-            sliders(["bw_amount"])
-            t.append(.mixer)
-        case .effects:
-            sliders(["dehaze", "sharpening", "vignette_amount", "vignette_midpoint", "vignette_feather", "vignette_roundness", "matte"])
-            t.append(.splitColors)
-            sliders(["split_shadow_sat", "split_highlight_sat", "split_balance",
-                     "halation_amount", "halation_radius", "bloom_amount", "bloom_threshold", "bloom_radius",
-                     "grain_amount", "grain_size", "grain_roughness"])
-        case .looks, .crop:
-            break
-        }
-        return t
-    }
+    var tools: [EditTool] { groups.flatMap { $0.tools } }
 }
 
 enum EditTool: Hashable {

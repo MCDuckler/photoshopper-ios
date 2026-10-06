@@ -32,20 +32,38 @@ struct EditorView: View {
     @State private var confirmRevert = false
     @State private var share: ShareFile?
     @State private var exporting = false
+    @Environment(\.horizontalSizeClass) private var hSize
+    private var wide: Bool { hSize == .regular }
 
     init(api: API, items: [PhotoItem], index: Int) {
         _m = StateObject(wrappedValue: EditorModel(api: api, items: items, index: index))
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            topBar
-            imageArea
-            panel
-                .frame(minHeight: 70)
-                .animation(.easeOut(duration: 0.18), value: m.tool)
-            if !m.category.tools.isEmpty { toolStrip }
-            categoryBar
+        Group {
+            if wide {
+                VStack(spacing: 0) {
+                    topBar
+                    HStack(spacing: 0) {
+                        VStack(spacing: 0) {
+                            imageArea
+                            if m.items.count > 1 { Filmstrip(m: m) }
+                        }
+                        Rectangle().fill(Color.white.opacity(0.1)).frame(width: 1)
+                        EditorInspector(m: m) { sheet = .presets }
+                    }
+                }
+            } else {
+                VStack(spacing: 0) {
+                    topBar
+                    imageArea
+                    panel
+                        .frame(minHeight: 64)
+                        .animation(.easeOut(duration: 0.18), value: m.tool)
+                    if !m.category.tools.isEmpty { toolStrip }
+                    categoryBar
+                }
+            }
         }
         .background(Color.black.ignoresSafeArea())
         .foregroundStyle(.white)
@@ -97,6 +115,11 @@ struct EditorView: View {
                 }
             }
             Spacer(minLength: 0)
+            if wide {
+                RatingStars(rating: m.rating) { m.rate($0) }
+                Button { m.showHistogram.toggle() } label: { Image(systemName: m.showHistogram ? "chart.bar.fill" : "chart.bar") }
+                    .accessibilityLabel("Histogram")
+            }
             Button { m.undo(); Haptics.tick() } label: { Image(systemName: "arrow.uturn.backward.circle") }
                 .disabled(!m.canUndo).accessibilityLabel("Undo")
             Button { m.redo(); Haptics.tick() } label: { Image(systemName: "arrow.uturn.forward.circle") }
@@ -150,7 +173,8 @@ struct EditorView: View {
 
     private var imageArea: some View {
         GeometryReader { g in
-            let box = CGSize(width: max(1, g.size.width - 24), height: max(1, g.size.height - 16))
+            let inset: CGFloat = wide ? 20 : 12
+            let box = CGSize(width: max(1, g.size.width - inset * 2), height: max(1, g.size.height - 12))
             let aspect = original ? m.sourceAspect : m.frameAspect
             let fit = Self.fit(aspect, in: box)
             ZStack {
@@ -182,7 +206,7 @@ struct EditorView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                         .padding(.top, 12)
                 }
-                if m.showHistogram, let h = m.histogram, !m.cropping {
+                if m.showHistogram, let h = m.histogram, !m.cropping, !wide {
                     HistogramView(h: h)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         .padding(14)
@@ -329,26 +353,18 @@ struct EditorView: View {
             case .mixer: MixerPanel(m: m)
             case .splitColors: SplitPanel(m: m)
             case .auto, .autoLight:
-                Theme.meta(m.tool == .auto ? "Exposure, contrast, white balance and levels from the photo." : "Exposure and brightness only.")
-                    .padding(.vertical, 26)
+                VStack(spacing: 10) {
+                    Theme.meta(m.tool == .auto ? "Exposure, contrast, white balance and levels from the photo." : "Exposure and brightness only.")
+                    Button { Task { await m.auto(toneOnly: m.tool == .autoLight) } } label: {
+                        Text("APPLY AGAIN").font(.custom("Helvetica Neue", size: 11).weight(.bold)).tracking(1.2)
+                            .padding(.horizontal, 14).padding(.vertical, 8)
+                            .background(Color.white.opacity(0.1), in: Capsule()).foregroundStyle(.white)
+                    }
+                    .buttonStyle(Pressable())
+                }
+                .padding(.vertical, 14)
             }
         }
-    }
-
-    private func isActive(_ t: EditTool) -> Bool {
-        switch t {
-        case .slider(let k): return !m.recipe.isDefault(k)
-        case .curve: return !m.recipe.isDefault("tone_curve")
-        case .hsl: return !m.recipe.isDefault("hsl")
-        case .mixer: return !m.recipe.isDefault("bw_mixer")
-        case .splitColors: return m.recipe.num("split_shadow_sat") > 0 || m.recipe.num("split_highlight_sat") > 0
-        case .auto, .autoLight: return false
-        }
-    }
-
-    private func magnitude(_ t: EditTool) -> Double {
-        if case .slider(let k) = t, let s = SliderSpec.all[k] { return s.magnitude(m.recipe.num(k)) }
-        return isActive(t) ? 1 : 0
     }
 
     private var toolStrip: some View {
@@ -356,7 +372,7 @@ struct EditorView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     ForEach(m.category.tools, id: \.self) { t in
-                        ToolButton(tool: t, selected: m.tool == t, magnitude: magnitude(t), active: isActive(t)) {
+                        ToolButton(tool: t, selected: m.tool == t, magnitude: m.magnitude(t), active: m.isActive(t)) {
                             Haptics.tick()
                             switch t {
                             case .auto: m.tool = t; Task { await m.auto(toneOnly: false) }
@@ -368,18 +384,11 @@ struct EditorView: View {
                         .id(t)
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 6)
+                .padding(.horizontal, 16)
+                .padding(.top, 2)
+                .padding(.bottom, 6)
             }
             .onAppear { proxy.scrollTo(m.tool, anchor: .center) }
-        }
-    }
-
-    private func categoryActive(_ c: EditCategory) -> Bool {
-        switch c {
-        case .looks: return m.recipe.lutName != nil || m.recipe.string("light_leak") != nil || m.recipe.string("film_border") != nil || m.recipe.bool("date_stamp")
-        case .crop: return m.recipe.cropActive || m.recipe.rotation != 0
-        default: return c.tools.contains { isActive($0) }
         }
     }
 
@@ -393,12 +402,12 @@ struct EditorView: View {
                     VStack(spacing: 4) {
                         Image(systemName: c.icon).font(.system(size: 18))
                             .overlay(alignment: .topTrailing) {
-                                if categoryActive(c) { Circle().fill(Theme.red).frame(width: 6, height: 6).offset(x: 5, y: -2) }
+                                if m.categoryActive(c) { Circle().fill(Theme.red).frame(width: 6, height: 6).offset(x: 5, y: -2) }
                             }
                         Text(c.rawValue.uppercased()).font(.custom("Helvetica Neue", size: 9).weight(.bold)).tracking(1.1)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, 6)
                     .foregroundStyle(m.category == c ? Theme.red : Color.white.opacity(0.7))
                 }
                 .buttonStyle(.plain)

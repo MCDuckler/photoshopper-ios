@@ -226,6 +226,8 @@ struct LibraryView: View {
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 12)
+        .frame(maxWidth: 640)
+        .frame(maxWidth: .infinity)
         .background(.bar)
         .overlay(alignment: .top) { Hairline() }
     }

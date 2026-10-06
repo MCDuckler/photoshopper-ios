@@ -139,19 +139,24 @@ struct ToolButton: View {
 
     var body: some View {
         Button(action: action) {
-            ZStack {
-                Circle().fill(selected ? Color.white : Color.white.opacity(0.08))
-                if active {
-                    Circle().trim(from: 0, to: max(0.05, magnitude))
-                        .stroke(Theme.red, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                        .padding(1.5)
+            VStack(spacing: 5) {
+                ZStack {
+                    Circle().fill(selected ? Color.white : Color.white.opacity(0.08))
+                    if active {
+                        Circle().trim(from: 0, to: max(0.05, magnitude))
+                            .stroke(Theme.red, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                            .padding(1.5)
+                    }
+                    Image(systemName: tool.icon)
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundStyle(selected ? Color.black : Color.white)
                 }
-                Image(systemName: tool.icon)
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(selected ? Color.black : Color.white)
+                .frame(width: 46, height: 46)
+                Text(tool.label.uppercased()).font(.custom("Helvetica Neue", size: 8).weight(.bold)).tracking(0.6)
+                    .lineLimit(1).frame(width: 58)
+                    .foregroundStyle(selected ? Color.white : Color.white.opacity(0.6))
             }
-            .frame(width: 48, height: 48)
         }
         .buttonStyle(Pressable())
         .accessibilityLabel(tool.label)
@@ -457,28 +462,20 @@ struct CropOverlay: View {
 
 struct CropPanel: View {
     @ObservedObject var m: EditorModel
+    var wide = false
 
     private let aspects: [(String, CGFloat?)] = [("Free", nil), ("Original", -1), ("Square", 1), ("3:2", 1.5), ("2:3", 2.0 / 3), ("4:5", 0.8), ("5:4", 1.25), ("16:9", 16.0 / 9), ("9:16", 9.0 / 16)]
 
     var body: some View {
         VStack(spacing: 14) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(aspects.indices, id: \.self) { i in
-                        let a = aspects[i]
-                        let on = isOn(a.1)
-                        Button {
-                            pick(a.1)
-                        } label: {
-                            Text(a.0.uppercased()).font(.custom("Helvetica Neue", size: 11).weight(.bold)).tracking(1.1)
-                                .padding(.horizontal, 12).padding(.vertical, 8)
-                                .background(on ? Color.white : Color.white.opacity(0.08), in: Capsule())
-                                .foregroundStyle(on ? Color.black : Color.white)
-                        }
-                        .buttonStyle(Pressable())
-                    }
+            if wide {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 70), spacing: 8)], spacing: 8) { aspectChips }
+                    .padding(.horizontal, 16)
+                Theme.meta("Drag a corner or edge of the box to resize, inside it to move.").padding(.horizontal, 16)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) { aspectChips }.padding(.horizontal, 16)
                 }
-                .padding(.horizontal, 16)
             }
             HStack(spacing: 28) {
                 Button { m.rotate() } label: { Label("Rotate", systemImage: "rotate.right") }
@@ -489,6 +486,21 @@ struct CropPanel: View {
             .foregroundStyle(.white)
         }
         .padding(.vertical, 12)
+    }
+
+    private var aspectChips: some View {
+        ForEach(aspects.indices, id: \.self) { i in
+            let a = aspects[i]
+            let on = isOn(a.1)
+            Button { pick(a.1) } label: {
+                Text(a.0.uppercased()).font(.custom("Helvetica Neue", size: 11).weight(.bold)).tracking(1.1)
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .frame(maxWidth: wide ? .infinity : nil)
+                    .background(on ? Color.white : Color.white.opacity(0.08), in: Capsule())
+                    .foregroundStyle(on ? Color.black : Color.white)
+            }
+            .buttonStyle(Pressable())
+        }
     }
 
     private var originalAspect: CGFloat { m.recipe.rotation % 180 == 0 ? m.sourceAspect : 1 / m.sourceAspect }
@@ -513,6 +525,7 @@ struct CropPanel: View {
 
 struct LooksPanel: View {
     @ObservedObject var m: EditorModel
+    var wide = false
     @State private var section = 0
     @State private var group = "All"
 
@@ -574,33 +587,39 @@ struct LooksPanel: View {
             }
             .padding(.horizontal, 16)
         }
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 10) {
-                    Thumb(title: "None", request: nil, selected: m.recipe.lutName == nil) {
-                        m.recipe.lutName = nil; m.commit(); Haptics.tick()
-                    }
-                    ForEach(shown) { l in
-                        Thumb(title: l.label, request: m.api.lutSwatch(m.item.id, lut: l.name), selected: m.recipe.lutName == l.name,
-                              star: m.favorites.contains(l.name)) {
-                            if m.recipe.lutName == l.name { return }
-                            m.recipe.lutName = l.name
-                            if m.recipe.lutAmount <= 0 { m.recipe.lutAmount = 1 }
-                            m.commit()
-                            Haptics.tick()
-                        }
-                        .id(l.name)
-                        .contextMenu {
-                            Button { Task { await m.toggleFavorite(l.name) } } label: {
-                                Label(m.favorites.contains(l.name) ? "Remove from favourites" : "Add to favourites", systemImage: "star")
-                            }
-                        }
-                    }
+        if wide {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 68), spacing: 10)], spacing: 12) { lutCells }
+                .padding(.horizontal, 16).padding(.top, 4)
+        } else {
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: 10) { lutCells }.padding(.horizontal, 16)
                 }
-                .padding(.horizontal, 16)
+                .frame(height: 96)
+                .onAppear { if let n = m.recipe.lutName { proxy.scrollTo(n, anchor: .center) } }
             }
-            .frame(height: 96)
-            .onAppear { if let n = m.recipe.lutName { proxy.scrollTo(n, anchor: .center) } }
+        }
+    }
+
+    @ViewBuilder private var lutCells: some View {
+        Thumb(title: "None", request: nil, selected: m.recipe.lutName == nil) {
+            m.recipe.lutName = nil; m.commit(); Haptics.tick()
+        }
+        ForEach(shown) { l in
+            Thumb(title: l.label, request: m.api.lutSwatch(m.item.id, lut: l.name), selected: m.recipe.lutName == l.name,
+                  star: m.favorites.contains(l.name)) {
+                if m.recipe.lutName == l.name { return }
+                m.recipe.lutName = l.name
+                if m.recipe.lutAmount <= 0 { m.recipe.lutAmount = 1 }
+                m.commit()
+                Haptics.tick()
+            }
+            .id(l.name)
+            .contextMenu {
+                Button { Task { await m.toggleFavorite(l.name) } } label: {
+                    Label(m.favorites.contains(l.name) ? "Remove from favourites" : "Add to favourites", systemImage: "star")
+                }
+            }
         }
     }
 
@@ -611,21 +630,27 @@ struct LooksPanel: View {
             MiniRuler(label: "Amount", spec: spec, value: m.recipe.num("light_leak_amount"),
                       onChange: { m.set("light_leak_amount", $0) }, onEnd: { m.endGesture() })
         }
-        ScrollView(.horizontal, showsIndicators: false) {
-            LazyHStack(spacing: 10) {
-                Thumb(title: "None", request: nil, selected: m.recipe.string(key) == nil) {
-                    m.recipe.setString(key, nil); m.commit(); Haptics.tick()
-                }
-                ForEach(items) { it in
-                    Thumb(title: it.label, request: m.api.overlayImage(kind, it.name), selected: m.recipe.string(key) == it.name) {
-                        m.recipe.setString(key, it.name); m.commit(); Haptics.tick()
-                    }
-                }
+        if wide {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 68), spacing: 10)], spacing: 12) { overlayCells(kind: kind, key: key, items: items) }
+                .padding(.horizontal, 16).padding(.top, 4)
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 10) { overlayCells(kind: kind, key: key, items: items) }.padding(.horizontal, 16)
             }
-            .padding(.horizontal, 16)
+            .frame(height: 96)
         }
-        .frame(height: 96)
         if items.isEmpty { Theme.meta("None on the server.") }
+    }
+
+    @ViewBuilder private func overlayCells(kind: String, key: String, items: [OverlayInfo]) -> some View {
+        Thumb(title: "None", request: nil, selected: m.recipe.string(key) == nil) {
+            m.recipe.setString(key, nil); m.commit(); Haptics.tick()
+        }
+        ForEach(items) { it in
+            Thumb(title: it.label, request: m.api.overlayImage(kind, it.name), selected: m.recipe.string(key) == it.name) {
+                m.recipe.setString(key, it.name); m.commit(); Haptics.tick()
+            }
+        }
     }
 
     private var dateSection: some View {

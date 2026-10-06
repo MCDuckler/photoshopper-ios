@@ -49,8 +49,9 @@ struct ReviewView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 10)
                 .padding(.bottom, 6)
-                caption
-                controls
+                .frame(maxWidth: 760)
+                caption.frame(maxWidth: 760)
+                controls.frame(maxWidth: 560)
             }
             .overlay { BurstView(token: burst).allowsHitTesting(false).ignoresSafeArea() }
             .overlay(alignment: .bottom) {
@@ -565,6 +566,7 @@ struct ReviewView: View {
         }
         .padding(16)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .frame(maxWidth: 720)
         .padding(.horizontal, 10)
         .padding(.bottom, 10)
         .onPreferenceChange(DropFrames.self) { targets = $0 }
