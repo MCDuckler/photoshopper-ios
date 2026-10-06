@@ -52,6 +52,10 @@ struct EditorView: View {
         .preferredColorScheme(.dark)
         .toast($m.toast, bottom: 230)
         .task { await m.load() }
+        .onChange(of: m.category) { _, _ in
+            zoomBase = 1; pan = .zero; panBase = .zero
+            if original { original = false }
+        }
         .onDisappear { Task { await m.flushSave() } }
         .sheet(item: $sheet) { s in sheetView(s) }
         .sheet(item: $share) { f in ShareSheet(items: [f.url]).ignoresSafeArea() }

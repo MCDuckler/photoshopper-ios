@@ -141,7 +141,7 @@ final class PreviewRenderer: NSObject, MTKViewDelegate {
         return t
     }
 
-    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
+    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) { view.setNeedsDisplay() }
 
     func draw(in view: MTKView) {
         guard let image, let rpd = view.currentRenderPassDescriptor, let drawable = view.currentDrawable,

@@ -1,7 +1,28 @@
 # Photoshopper3000 for iPhone
 
-Carries the photos you select in [Photoshopper3000](https://github.com/MCDuckler) into a
-Photos album on your iPhone, so iCloud Photos has them on every device.
+A native client for [Photoshopper3000](https://github.com/MCDuckler): review, edit and
+publish your RAWs from the phone, and carry the photos you pick into a Photos album so
+iCloud Photos has them on every device.
+
+## Review, edit, publish
+
+- **Review tab.** One photo at a time over any album, folder or rating filter. Swipe right
+  to keep (★5 by default), left to reject, up to skip; slide across the stars to grade.
+  Press and hold the photo to lift it, then drop it on an album. Pinch or double-tap to
+  check focus. Works offline: ratings and album changes queue on the phone and reach the
+  server (last writer wins) when it is back.
+- **Editor.** Light, Color, Effects, Looks and Crop, with the same pipeline as the server:
+  exposure through vignette on ruler dials, tone curve, colour mix per hue band, B&W mixer,
+  split toning, film looks (LUTs) with favourites, light leaks, borders, date stamp, crop
+  with aspect lock and rotate. A Metal shader mirrors the server's maths for instant
+  feedback; the server render fades in a moment later. Hold the photo for the original,
+  swipe for the next one. Autosaves, undo/redo, presets, copy/paste edits, auto, histogram,
+  share or save the full render.
+- **Library.** Justified grid by month, sort, rating filter; select to rate, file into
+  albums, paste edits, apply a preset, export or share. Albums can be created, renamed,
+  deleted and published as web galleries (share link, QR, sync).
+
+## Phone album
 
 - **Only what you select.** In Photoshopper: Library › Select › *Phone* › *Sync to phone*
   (full quality or web size). The app syncs exactly that set, nothing implicit.
@@ -41,5 +62,9 @@ Locally on a Mac: `brew install xcodegen && xcodegen && open Photoshopper3000.xc
 | `GET /api/sync/set` | selected photos with their current recipe hash |
 | `POST /api/sync/prepare` | render the set ahead of the phone |
 | `GET /api/photos/{id}/export?variant=full\|web&hash=` | rendered JPEG with XMP tag; 409 if the edit changed |
+| `POST /api/ops` | queued ratings, album and edit changes from the phone |
+| `GET/PUT/DELETE /api/photos/{id}/edit`, `POST …/preview_edit`, `POST …/render` | editor |
+| `/api/presets`, `/api/luts`, `/api/overlays/*`, `/api/edits/batch` | looks, presets, batch edits |
+| `/api/albums`, `/api/publish/targets` | albums and galleries |
 
 Bundle id `dance.duckduck.p3k`, iOS 17+, SwiftUI, no third-party packages.

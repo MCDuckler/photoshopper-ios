@@ -1,4 +1,7 @@
 import SwiftUI
+import Photos
+
+struct ShareBatch: Identifiable { let id = UUID(); let urls: [URL] }
 
 struct ViewerTarget: Identifiable { let id: Int }
 
@@ -11,6 +14,8 @@ struct LibraryView: View {
     @State private var pinchBase: CGFloat = 120
     @State private var showAlbumPicker = false
     @State private var presets: [Preset] = []
+    @State private var exporting: String?
+    @State private var shareFiles: ShareBatch?
     @State private var confirmClear = false
     private let gap: CGFloat = 6
 
@@ -32,11 +37,13 @@ struct LibraryView: View {
             .toolbar { toolbar }
             .safeAreaInset(edge: .bottom) { if lib.selecting { selectionBar } }
             .sheet(isPresented: $showScopes) {
-                ScopeSheet(scope: $lib.scope, folders: lib.folders, phoneCount: lib.phoneIDs.count) {
+                ScopeSheet(scope: $lib.scope, folders: lib.folders, phoneCount: lib.phoneIDs.count,
+                           onReview: { sc in showScopes = false; app.startReview(scope: sc, filter: .any) }) {
                     showScopes = false
                     Task { await lib.reload(app.api) }
                 }
             }
+            .sheet(item: $shareFiles) { b in ShareSheet(items: b.urls).ignoresSafeArea() }
             .sheet(isPresented: $showAlbumPicker) {
                 AlbumPicker(photoIDs: ordered(lib.selected)) { msg in flash(msg); lib.endSelection() }
                     .environmentObject(app)
@@ -135,6 +142,9 @@ struct LibraryView: View {
                 Picker("Rating", selection: $lib.filter) {
                     ForEach(RatingFilter.allCases) { Text($0.rawValue).tag($0) }
                 }
+                Picker("Sort", selection: Binding(get: { lib.sort }, set: { lib.sort = $0; Task { await lib.reload(app.api) } })) {
+                    ForEach(SortOrder.allCases) { Text($0.label).tag($0) }
+                }
             } label: {
                 Image(systemName: lib.filter == .any ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
             }
@@ -166,7 +176,17 @@ struct LibraryView: View {
             }
             .font(.custom("Helvetica Neue", size: 13))
             HStack(spacing: 18) {
-                Button { showAlbumPicker = true } label: { Label("Album", systemImage: "rectangle.stack.badge.plus") }
+                Menu {
+                    Button { showAlbumPicker = true } label: { Label("Add to Album…", systemImage: "rectangle.stack.badge.plus") }
+                    if case .album(let aid, let aname) = lib.scope {
+                        Button(role: .destructive) { removeFromAlbum(aid, aname) } label: { Label("Remove from \(aname)", systemImage: "minus.circle") }
+                    }
+                } label: { Label("Album", systemImage: "rectangle.stack.badge.plus") }
+                Menu {
+                    Button { Task { await exportSelection(share: true) } } label: { Label("Share (web size)…", systemImage: "square.and.arrow.up") }
+                    Button { Task { await exportSelection(share: false) } } label: { Label("Save to Photos (full)", systemImage: "square.and.arrow.down") }
+                } label: { Label("Export", systemImage: "square.and.arrow.up") }
+                    .disabled(exporting != nil)
                 Menu {
                     ForEach((1...5).reversed(), id: \.self) { n in
                         Button(String(repeating: "★", count: n)) { rateSelection(n) }
@@ -211,6 +231,52 @@ struct LibraryView: View {
     }
 
     private func ordered(_ ids: Set<String>) -> [String] { lib.items.map(\.id).filter { ids.contains($0) } }
+
+    private func removeFromAlbum(_ id: Int, _ name: String) {
+        let ids = ordered(lib.selected)
+        if let a = AlbumStore.shared.albums.first(where: { $0.id == id }) { AlbumStore.shared.remove(a, ids) }
+        else { Outbox.shared.albumRemove(id, ids) }
+        flash("\(ids.count) removed from \(name)")
+        lib.endSelection()
+    }
+
+    /// Render each selected photo with its edit, then share the files or add them to Photos.
+    private func exportSelection(share: Bool) async {
+        guard let api = app.api else { return }
+        let ids = Array(ordered(lib.selected).prefix(share ? 40 : 200))
+        guard !ids.isEmpty else { return }
+        var urls: [URL] = []
+        var saved = 0
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("export-\(UUID().uuidString.prefix(6))", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        if !share {
+            let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+            guard status == .authorized || status == .limited else { flash("No permission to add photos"); return }
+        }
+        for (i, id) in ids.enumerated() {
+            exporting = "Rendering \(i + 1) of \(ids.count)…"
+            flash(exporting ?? "")
+            do {
+                let saved0 = try await api.edit(id)
+                let recipe = Recipe(server: saved0?.recipe).json
+                let (data, name) = try await api.render(id, recipe: recipe, web: share)
+                if share {
+                    let u = dir.appendingPathComponent(name)
+                    try data.write(to: u, options: .atomic)
+                    urls.append(u)
+                } else {
+                    try await PHPhotoLibrary.shared().performChanges {
+                        PHAssetCreationRequest.forAsset().addResource(with: .photo, data: data, options: nil)
+                    }
+                    saved += 1
+                }
+            } catch { flash("\(id): \(error.localizedDescription)") }
+        }
+        exporting = nil
+        if share { if !urls.isEmpty { shareFiles = ShareBatch(urls: urls) } }
+        else { flash("\(saved) saved to Photos"); UINotificationFeedbackGenerator().notificationOccurred(.success) }
+        lib.endSelection()
+    }
 
     private func batchPaste() async {
         guard let clip = EditClipboard.value else { return }
@@ -299,19 +365,40 @@ struct ScopeSheet: View {
     @Binding var scope: Scope
     let folders: [Folder]
     let phoneCount: Int?
+    var onReview: ((Scope) -> Void)? = nil
     let done: () -> Void
     @ObservedObject private var albums = AlbumStore.shared
+    @State private var naming = false
+    @State private var newName = ""
+    @State private var renaming: Album?
+    @State private var deleting: Album?
+    @State private var error: String?
 
     var body: some View {
         NavigationStack {
             List {
+                if let error { Text(error).foregroundStyle(Theme.red) }
                 Section {
                     row("All photos", count: nil, on: scope == .all) { scope = .all }
                     row("On the phone", count: phoneCount, on: scope == .phone, icon: "iphone") { scope = .phone }
+                    NavigationLink { GalleriesView().environmentObject(AppModel.shared) } label: {
+                        Label("Galleries", systemImage: "globe").foregroundStyle(.primary)
+                    }
                 }
-                Section("Albums") {
+                Section {
                     ForEach(albums.ordered) { a in
                         row(a.name, count: a.count, on: scope == .album(a.id, a.name), icon: (a.published ?? 0) > 0 ? "globe" : nil) { scope = .album(a.id, a.name) }
+                            .contextMenu { albumMenu(a) }
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) { deleting = a } label: { Label("Delete", systemImage: "trash") }
+                                Button { newName = a.name; renaming = a } label: { Label("Rename", systemImage: "pencil") }.tint(.gray)
+                            }
+                    }
+                } header: {
+                    HStack {
+                        Text("Albums")
+                        Spacer()
+                        Button { newName = ""; naming = true } label: { Image(systemName: "plus") }.accessibilityLabel("New album")
                     }
                 }
                 if !folders.isEmpty {
@@ -325,8 +412,55 @@ struct ScopeSheet: View {
             .navigationTitle("Browse")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Close") { done() } } }
+            .alert("New album", isPresented: $naming) {
+                TextField("Name", text: $newName)
+                Button("Cancel", role: .cancel) {}
+                Button("Create") { let n = newName; Task { await create(n) } }
+            }
+            .alert("Rename album", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+                TextField("Name", text: $newName)
+                Button("Cancel", role: .cancel) {}
+                Button("Rename") { if let a = renaming { let n = newName; Task { await rename(a, n) } } }
+            }
+            .confirmationDialog("Delete album?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
+                Button("Delete Album", role: .destructive) { if let a = deleting { Task { await delete(a) } } }
+            } message: { Text("The photos stay in the library. A published gallery of this album goes offline.") }
         }
         .presentationDetents([.medium, .large])
+    }
+
+    @ViewBuilder private func albumMenu(_ a: Album) -> some View {
+        if let onReview {
+            Button { onReview(.album(a.id, a.name)) } label: { Label("Review This Album", systemImage: "rectangle.stack") }
+        }
+        Button { newName = a.name; renaming = a } label: { Label("Rename…", systemImage: "pencil") }
+        Button(role: .destructive) { deleting = a } label: { Label("Delete…", systemImage: "trash") }
+    }
+
+    private func create(_ name: String) async {
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !n.isEmpty else { return }
+        do { _ = try await albums.create(n, api: AppModel.shared.api); await albums.load(AppModel.shared.api) }
+        catch { self.error = error.localizedDescription }
+    }
+
+    private func rename(_ a: Album, _ name: String) async {
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !n.isEmpty, let api = AppModel.shared.api else { return }
+        do {
+            try await api.renameAlbum(a.id, to: n)
+            await albums.load(api)
+            if scope == .album(a.id, a.name) { scope = .album(a.id, n) }
+        } catch { self.error = error.localizedDescription }
+    }
+
+    private func delete(_ a: Album) async {
+        guard let api = AppModel.shared.api else { return }
+        do {
+            try await api.deleteAlbum(a.id)
+            await albums.load(api)
+            if scope == .album(a.id, a.name) { scope = .all; done() }
+        } catch { self.error = error.localizedDescription }
     }
 
     private func row(_ title: String, count: Int?, on: Bool, icon: String? = nil, _ pick: @escaping () -> Void) -> some View {

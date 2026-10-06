@@ -24,6 +24,12 @@ enum Scope: Hashable {
     }
 }
 
+enum SortOrder: String, CaseIterable, Identifiable {
+    case newest = "capture_desc", oldest = "capture_asc", name = "filename"
+    var id: String { rawValue }
+    var label: String { self == .newest ? "Newest first" : self == .oldest ? "Oldest first" : "File name" }
+}
+
 enum RatingFilter: String, CaseIterable, Identifiable {
     case any = "Any", unrated = "Unrated", one = "★1+", two = "★2+", three = "★3+", four = "★4+", five = "★5", rejected = "Rejected"
     var id: String { rawValue }
@@ -85,7 +91,11 @@ final class LibraryModel: ObservableObject {
         }
     }
 
-    var query: String { [scope.query, filter.query].filter { !$0.isEmpty }.joined(separator: "&") }
+    @Published var sort: SortOrder = SortOrder(rawValue: UserDefaults.standard.string(forKey: "librarySort") ?? "") ?? .newest {
+        didSet { UserDefaults.standard.set(sort.rawValue, forKey: "librarySort") }
+    }
+
+    var query: String { [scope.query, filter.query, "sort=" + sort.rawValue].filter { !$0.isEmpty }.joined(separator: "&") }
 
     func reload(_ api: API?) async {
         guard let api else { return }

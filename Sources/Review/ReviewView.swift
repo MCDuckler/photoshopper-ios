@@ -61,7 +61,7 @@ struct ReviewView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbar }
             .sheet(isPresented: $showScopes) {
-                ScopeSheet(scope: $deck.scope, folders: folders, phoneCount: nil) {
+                ScopeSheet(scope: $deck.scope, folders: folders, phoneCount: nil, onReview: nil) {
                     showScopes = false
                     Task { await deck.reload(app.api) }
                 }
