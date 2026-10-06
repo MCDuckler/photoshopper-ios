@@ -7,6 +7,9 @@ struct SettingsView: View {
     @State private var album = Settings.albumName
     @State private var rescanText: String?
     @State private var confirmReset = false
+    @AppStorage("reviewKeepRating") private var keepRating = 5
+    @AppStorage("reviewHaptics") private var haptics = true
+    @AppStorage("reviewEffects") private var effects = true
 
     private var version: String {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
@@ -21,6 +24,15 @@ struct SettingsView: View {
                     NavigationLink { ConnectView() } label: {
                         VStack(alignment: .leading) { Text(model.serverURL.isEmpty ? "Not set" : model.serverURL); Theme.meta(model.connected ? "Connected" : "Not reachable") }
                     }
+                }
+                Section {
+                    Picker("Swipe right gives", selection: $keepRating) {
+                        ForEach((1...5).reversed(), id: \.self) { Text(String(repeating: "★", count: $0)).tag($0) }
+                    }
+                    Toggle("Haptics", isOn: $haptics)
+                    Toggle("Stars and confetti", isOn: $effects)
+                } header: { Text("Review") } footer: {
+                    Text("Swipe left rejects, up skips. Press and hold a photo to drop it into an album.")
                 }
                 Section {
                     Toggle("Sync in the background", isOn: $background)

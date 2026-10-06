@@ -10,6 +10,7 @@ struct PhotoViewer: View {
     @State private var drag: CGSize = .zero
     @State private var zoom: CGFloat = 1
     @State private var busy = false
+    @State private var albumFor: PickerTarget?
 
     private var item: PhotoItem? { lib.items.indices.contains(index) ? lib.items[index] : nil }
 
@@ -37,6 +38,7 @@ struct PhotoViewer: View {
                 }
                 .onAppear { prefetch() }
                 .onChange(of: index) { _, _ in prefetch() }
+                .sheet(item: $albumFor) { t in AlbumPicker(photoIDs: [t.id]) { flash($0) }.environmentObject(app) }
             }
         }
     }
@@ -49,6 +51,9 @@ struct PhotoViewer: View {
                     .font(.custom("Helvetica Neue", size: 11)).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer()
+            Button { albumFor = PickerTarget(id: p.id) } label: { Image(systemName: "rectangle.stack.badge.plus") }
+                .accessibilityLabel("Albums")
+                .padding(.trailing, 14)
             Button("Close") { dismiss() }.font(.custom("Helvetica Neue", size: 13).weight(.medium))
         }
         .padding(.horizontal, 20).padding(.top, 12)
@@ -103,11 +108,8 @@ struct PhotoViewer: View {
     }
 
     private func rate(_ p: PhotoItem, _ r: Int) {
-        var copy = p
-        copy.rating = r
-        lib.update(copy)
         UISelectionFeedbackGenerator().selectionChanged()
-        Task { do { try await app.api?.rate(p.id, r) } catch { flash("Rating failed: \(error.localizedDescription)") } }
+        Outbox.shared.rate([p.id], r)
     }
 
     private func togglePhone(_ p: PhotoItem, _ onPhone: Bool) async {

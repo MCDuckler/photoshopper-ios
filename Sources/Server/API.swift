@@ -56,7 +56,7 @@ struct API {
         return URLSession(configuration: c)
     }()
 
-    fileprivate func request(_ path: String, method: String = "GET", body: Data? = nil, timeout: TimeInterval = 20) -> URLRequest {
+    func request(_ path: String, method: String = "GET", body: Data? = nil, timeout: TimeInterval = 20) -> URLRequest {
         var r = URLRequest(url: URL(string: base.absoluteString + path)!)
         r.httpMethod = method
         r.timeoutInterval = timeout
@@ -66,7 +66,7 @@ struct API {
         return r
     }
 
-    fileprivate func send(_ r: URLRequest) async throws -> (Data, HTTPURLResponse) {
+    func send(_ r: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let (d, resp) = try await Self.session.data(for: r)
         guard let http = resp as? HTTPURLResponse else { throw APIError.status(0, "no response") }
         if http.statusCode == 409 { throw APIError.stale(String(data: d, encoding: .utf8) ?? "") }
@@ -118,8 +118,8 @@ struct PhotoItem: Decodable, Identifiable, Hashable {
     let h: Int?
     let capture_dt: String?
     var rating: Int
-    let has_edit: Bool
-    let edited_at: Double?
+    var has_edit: Bool
+    var edited_at: Double?
     let camera: String?
 
     var aspect: CGFloat {
@@ -198,5 +198,11 @@ extension API {
         p.has_edit
             ? imageRequest("/api/photos/\(p.id)/edited_preview?long_edge=1600&v=\(Int(p.edited_at ?? 0))")
             : imageRequest("/api/photos/\(p.id)/preview")
+    }
+
+    /// Sharper than `preview` for zooming in. Unedited photos only have the 2048 px
+    /// RAW preview, which `preview` already is.
+    func hq(_ p: PhotoItem) -> URLRequest? {
+        p.has_edit ? imageRequest("/api/photos/\(p.id)/edited_preview?long_edge=4096&v=\(Int(p.edited_at ?? 0))") : nil
     }
 }

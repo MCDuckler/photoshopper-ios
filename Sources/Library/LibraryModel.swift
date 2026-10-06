@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 enum Scope: Hashable {
     case all, phone
@@ -24,13 +25,14 @@ enum Scope: Hashable {
 }
 
 enum RatingFilter: String, CaseIterable, Identifiable {
-    case any = "Any", unrated = "Unrated", one = "★1+", three = "★3+", four = "★4+", five = "★5", rejected = "Rejected"
+    case any = "Any", unrated = "Unrated", one = "★1+", two = "★2+", three = "★3+", four = "★4+", five = "★5", rejected = "Rejected"
     var id: String { rawValue }
     var query: String {
         switch self {
         case .any: return ""
         case .unrated: return "unrated=true"
         case .one: return "min_rating=1"
+        case .two: return "min_rating=2"
         case .three: return "min_rating=3"
         case .four: return "min_rating=4"
         case .five: return "min_rating=5"
@@ -49,7 +51,6 @@ final class LibraryModel: ObservableObject {
     @Published var filter: RatingFilter = .any
     @Published private(set) var items: [PhotoItem] = []
     @Published private(set) var loading = false
-    @Published var albums: [Album] = []
     @Published var folders: [Folder] = []
     @Published var phoneIDs: Set<String> = []
     @Published var selecting = false
@@ -60,6 +61,29 @@ final class LibraryModel: ObservableObject {
     private var gen = 0
     private var layoutKey = ""
     private var layoutCache: [JSection] = []
+    private var bag: Set<AnyCancellable> = []
+
+    init() {
+        Outbox.shared.changes.sink { [weak self] c in self?.apply(c) }.store(in: &bag)
+    }
+
+    private func apply(_ c: LocalChange) {
+        switch c {
+        case .rating(let ids, let r):
+            let set = Set(ids)
+            for i in items.indices where set.contains(items[i].id) { items[i].rating = r }
+            layoutKey = ""
+        case .edited(let id, let has, let at):
+            if let i = items.firstIndex(where: { $0.id == id }) { items[i].has_edit = has; items[i].edited_at = has ? at : nil }
+            layoutKey = ""
+        case .album(let albumID, let ids, let added):
+            if !added, case .album(let open, _) = scope, open == albumID {
+                let set = Set(ids)
+                items.removeAll { set.contains($0.id) }
+                layoutKey = ""
+            }
+        }
+    }
 
     var query: String { [scope.query, filter.query].filter { !$0.isEmpty }.joined(separator: "&") }
 
@@ -88,10 +112,9 @@ final class LibraryModel: ObservableObject {
 
     func loadMeta(_ api: API?) async {
         guard let api else { return }
-        async let a = try? api.albums()
         async let f = try? api.folders()
         async let p = try? api.phoneIDs()
-        if let v = await a { albums = v }
+        await AlbumStore.shared.load(api)
         if let v = await f { folders = v }
         if let v = await p { phoneIDs = v }
     }

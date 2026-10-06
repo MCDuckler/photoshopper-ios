@@ -2,7 +2,8 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject var model: AppModel
-    @State private var tab = 0
+    @ObservedObject private var outbox = Outbox.shared
+    private let heartbeat = Timer.publish(every: 20, on: .main, in: .common).autoconnect()
 
     var body: some View {
         Group {
@@ -11,23 +12,27 @@ struct RootView: View {
             } else {
                 VStack(spacing: 0) {
                 if model.showUpdateBanner, let r = model.update { UpdateBanner(release: r) }
-                TabView(selection: $tab) {
-                    LibraryView().tabItem { Label("Library", systemImage: "photo.on.rectangle") }.tag(0)
-                    HomeView().tabItem { Label("Sync", systemImage: "arrow.triangle.2.circlepath") }.tag(1)
-                    LogView().tabItem { Label("Activity", systemImage: "list.bullet") }.tag(2)
-                    SettingsView().tabItem { Label("Settings", systemImage: "gearshape") }.tag(3)
+                TabView(selection: $model.tab) {
+                    LibraryView().tabItem { Label("Library", systemImage: "photo.on.rectangle") }.tag(AppTab.library)
+                    ReviewView().tabItem { Label("Review", systemImage: "rectangle.stack") }.tag(AppTab.review)
+                    HomeView().tabItem { Label("Sync", systemImage: "arrow.triangle.2.circlepath") }.tag(AppTab.sync)
+                        .badge(outbox.pending)
+                    SettingsView().tabItem { Label("Settings", systemImage: "gearshape") }.tag(AppTab.settings)
                 }
                 }
             }
         }
         .task {
             if !model.serverURL.isEmpty { _ = await model.connect(url: model.serverURL) }
+            await Outbox.shared.flush()
         }
+        .onReceive(heartbeat) { _ in Task { await Outbox.shared.flush() } }
     }
 }
 
 struct HomeView: View {
     @EnvironmentObject var model: AppModel
+    @ObservedObject private var outbox = Outbox.shared
 
     var body: some View {
         NavigationStack {
@@ -73,6 +78,20 @@ struct HomeView: View {
                     Button {
                         if let u = URL(string: "photos-redirect://") { UIApplication.shared.open(u) }
                     } label: { Theme.label("Open Photos").foregroundStyle(Theme.red) }
+
+                    if outbox.pending > 0 || outbox.lastError != nil {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Theme.label("Waiting to send")
+                            Theme.meta(outbox.pending == 0 ? "Everything sent." : "\(outbox.pending) rating/album change\(outbox.pending == 1 ? "" : "s") queued — sent when the server is reachable.")
+                            if let e = outbox.lastError { Text(e).font(.custom("Helvetica Neue", size: 12)).foregroundStyle(Theme.red) }
+                            Button("Send now") { Task { await Outbox.shared.flush() } }.font(.custom("Helvetica Neue", size: 13).weight(.medium))
+                        }
+                    }
+
+                    NavigationLink { LogView() } label: {
+                        HStack { Theme.label("Activity"); Spacer(); Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary) }
+                    }
+                    .buttonStyle(.plain)
                 }
                 .padding(20)
             }
@@ -91,7 +110,7 @@ struct HomeView: View {
 struct LogView: View {
     @EnvironmentObject var model: AppModel
     var body: some View {
-        NavigationStack {
+        Group {
             List(model.log) { line in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(line.text).font(.custom("Helvetica Neue", size: 13))

@@ -9,6 +9,7 @@ struct LibraryView: View {
     @State private var viewer: ViewerTarget?
     @State private var toast: String?
     @State private var pinchBase: CGFloat = 120
+    @State private var showAlbumPicker = false
     private let gap: CGFloat = 6
 
     var body: some View {
@@ -28,7 +29,16 @@ struct LibraryView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbar }
             .safeAreaInset(edge: .bottom) { if lib.selecting { selectionBar } }
-            .sheet(isPresented: $showScopes) { ScopeSheet(lib: lib) { showScopes = false; Task { await lib.reload(app.api) } } }
+            .sheet(isPresented: $showScopes) {
+                ScopeSheet(scope: $lib.scope, folders: lib.folders, phoneCount: lib.phoneIDs.count) {
+                    showScopes = false
+                    Task { await lib.reload(app.api) }
+                }
+            }
+            .sheet(isPresented: $showAlbumPicker) {
+                AlbumPicker(photoIDs: ordered(lib.selected)) { msg in flash(msg); lib.endSelection() }
+                    .environmentObject(app)
+            }
             .fullScreenCover(item: $viewer) { t in
                 PhotoViewer(lib: lib, index: t.id) { msg in flash(msg) }
                     .environmentObject(app)
@@ -125,6 +135,11 @@ struct LibraryView: View {
             .onChange(of: lib.filter) { _, _ in Task { await lib.reload(app.api) } }
         }
         ToolbarItem(placement: .topBarTrailing) {
+            Button { app.startReview(scope: lib.scope, filter: lib.filter) } label: { Image(systemName: "rectangle.stack") }
+                .accessibilityLabel("Review these photos")
+                .disabled(lib.selecting)
+        }
+        ToolbarItem(placement: .topBarTrailing) {
             Button(lib.selecting ? "Done" : "Select") {
                 if lib.selecting { lib.endSelection() } else { lib.selecting = true }
             }
@@ -144,6 +159,19 @@ struct LibraryView: View {
                 Button("None") { lib.selected.removeAll() }
             }
             .font(.custom("Helvetica Neue", size: 13))
+            HStack(spacing: 18) {
+                Button { showAlbumPicker = true } label: { Label("Album", systemImage: "rectangle.stack.badge.plus") }
+                Menu {
+                    ForEach((1...5).reversed(), id: \.self) { n in
+                        Button(String(repeating: "★", count: n)) { rateSelection(n) }
+                    }
+                    Button("Clear rating") { rateSelection(0) }
+                    Button("Reject", role: .destructive) { rateSelection(-1) }
+                } label: { Label("Rate", systemImage: "star") }
+                Spacer()
+            }
+            .font(.custom("Helvetica Neue", size: 13).weight(.medium))
+            .disabled(lib.selected.isEmpty)
             HStack(spacing: 10) {
                 Menu {
                     Button("Full quality") { Task { await add("full") } }
@@ -169,6 +197,14 @@ struct LibraryView: View {
     }
 
     private func ordered(_ ids: Set<String>) -> [String] { lib.items.map(\.id).filter { ids.contains($0) } }
+
+    private func rateSelection(_ r: Int) {
+        let ids = ordered(lib.selected)
+        Outbox.shared.rate(ids, r)
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        flash(r == -1 ? "\(ids.count) rejected" : r == 0 ? "\(ids.count) cleared" : "\(ids.count) rated " + String(repeating: "★", count: r))
+        lib.endSelection()
+    }
 
     private func add(_ variant: String) async {
         let ids = ordered(lib.selected)
@@ -228,24 +264,29 @@ struct PhotoCell: View {
 }
 
 struct ScopeSheet: View {
-    @ObservedObject var lib: LibraryModel
+    @Binding var scope: Scope
+    let folders: [Folder]
+    let phoneCount: Int?
     let done: () -> Void
+    @ObservedObject private var albums = AlbumStore.shared
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    row("All photos", count: nil, on: lib.scope == .all) { lib.scope = .all }
-                    row("On the phone", count: lib.phoneIDs.count, on: lib.scope == .phone, icon: "iphone") { lib.scope = .phone }
+                    row("All photos", count: nil, on: scope == .all) { scope = .all }
+                    row("On the phone", count: phoneCount, on: scope == .phone, icon: "iphone") { scope = .phone }
                 }
                 Section("Albums") {
-                    ForEach(lib.albums) { a in
-                        row(a.name, count: a.count, on: lib.scope == .album(a.id, a.name), icon: (a.published ?? 0) > 0 ? "globe" : nil) { lib.scope = .album(a.id, a.name) }
+                    ForEach(albums.ordered) { a in
+                        row(a.name, count: a.count, on: scope == .album(a.id, a.name), icon: (a.published ?? 0) > 0 ? "globe" : nil) { scope = .album(a.id, a.name) }
                     }
                 }
-                Section("Folders") {
-                    ForEach(lib.folders) { f in
-                        row(f.path.isEmpty ? "Pictures" : f.path, count: f.count, on: lib.scope == .folder(f.path)) { lib.scope = .folder(f.path) }
+                if !folders.isEmpty {
+                    Section("Folders") {
+                        ForEach(folders) { f in
+                            row(f.path.isEmpty ? "Pictures" : f.path, count: f.count, on: scope == .folder(f.path)) { scope = .folder(f.path) }
+                        }
                     }
                 }
             }

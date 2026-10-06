@@ -21,6 +21,7 @@ struct Photoshopper3000App: App {
             case .active:
                 Task { await model.syncIfDue(reason: "open") }
                 Task { await model.checkForUpdate() }
+                Task { await Outbox.shared.flush() }
             case .background:
                 BackgroundSync.schedule()
             default:

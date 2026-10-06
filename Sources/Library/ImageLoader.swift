@@ -38,11 +38,21 @@ final class ImageLoader {
 struct RemoteImage: View {
     let request: URLRequest?
     var fill = true
+    /// Grey box while loading; off when this image sits over a low-res stand-in.
+    var placeholder = true
     @State private var img: UIImage?
+
+    init(request: URLRequest?, fill: Bool = true, placeholder: Bool = true) {
+        self.request = request
+        self.fill = fill
+        self.placeholder = placeholder
+        // Straight from memory on first render, so a promoted deck card never flashes.
+        _img = State(initialValue: request.flatMap { ImageLoader.shared.cached($0) })
+    }
 
     var body: some View {
         ZStack {
-            Color.primary.opacity(0.06)
+            if placeholder { Color.primary.opacity(0.06) }
             if let img {
                 Image(uiImage: img).resizable()
                     .aspectRatio(contentMode: fill ? .fill : .fit)
@@ -51,7 +61,7 @@ struct RemoteImage: View {
         }
         .clipped()
         .task(id: request?.url) {
-            guard let request else { return }
+            guard let request else { img = nil; return }
             if let c = ImageLoader.shared.cached(request) { img = c; return }
             img = nil
             let loaded = await ImageLoader.shared.image(request)

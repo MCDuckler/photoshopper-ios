@@ -19,6 +19,15 @@ final class AppModel: ObservableObject {
     @Published var lastSync: Date? = Settings.lastSync
     @Published var log: [LogLine] = LogStore.load()
 
+    @Published var tab: AppTab = .library
+    @Published var reviewRequest: ReviewRequest?
+
+    /// Library → Review with the library's scope and filter.
+    func startReview(scope: Scope, filter: RatingFilter) {
+        reviewRequest = ReviewRequest(scope: scope, filter: filter)
+        tab = .review
+    }
+
     @Published var update: Release?
     @Published var checkingUpdate = false
     @Published var lastUpdateCheck: Date?
@@ -125,6 +134,14 @@ final class AppModel: ObservableObject {
         if log.count > 400 { log.removeLast(log.count - 400) }
         LogStore.save(log)
     }
+}
+
+enum AppTab: Hashable { case library, review, sync, settings }
+
+struct ReviewRequest: Equatable {
+    let scope: Scope
+    let filter: RatingFilter
+    let n = UUID()
 }
 
 struct SyncCounts: Codable, Equatable {
