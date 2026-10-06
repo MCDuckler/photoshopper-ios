@@ -31,6 +31,7 @@ struct ReviewView: View {
     @State private var naming: String?
     @State private var newName = ""
     @State private var started = false
+    @State private var editing: EditorTarget?
 
     private let threshold: CGFloat = 110
     private var zoomed: Bool { zoom > 1.01 }
@@ -64,6 +65,9 @@ struct ReviewView: View {
                     showScopes = false
                     Task { await deck.reload(app.api) }
                 }
+            }
+            .fullScreenCover(item: $editing) { t in
+                if let api = app.api { EditorView(api: api, items: t.items, index: t.index).environmentObject(app) }
             }
             .sheet(item: $picker) { t in
                 AlbumPicker(photoIDs: [t.id]) { msg in toast = msg }.environmentObject(app)
@@ -149,6 +153,7 @@ struct ReviewView: View {
             .accessibilityAction(named: "Reject") { act(-1, .left) }
             .accessibilityAction(named: "Skip") { act(nil, .up) }
             .accessibilityAction(named: "Add to album") { picker = PickerTarget(id: p.id) }
+            .accessibilityAction(named: "Edit") { openEditor() }
     }
 
     @ViewBuilder private var quickAlbum: some View {
@@ -309,6 +314,11 @@ struct ReviewView: View {
             }
         }
         ToolbarItem(placement: .topBarTrailing) {
+            Button { openEditor() } label: { Image(systemName: "slider.horizontal.3") }
+                .disabled(deck.current == nil)
+                .accessibilityLabel("Edit this photo")
+        }
+        ToolbarItem(placement: .topBarTrailing) {
             Menu {
                 Picker("Swipe right gives", selection: $keepRating) {
                     ForEach((1...5).reversed(), id: \.self) { Text(String(repeating: "★", count: $0)).tag($0) }
@@ -343,6 +353,7 @@ struct ReviewView: View {
             Button("3") { act(3, .right) }.keyboardShortcut("3", modifiers: [])
             Button("4") { act(4, .right) }.keyboardShortcut("4", modifiers: [])
             Button("5") { act(5, .right) }.keyboardShortcut("5", modifiers: [])
+            Button("Edit") { openEditor() }.keyboardShortcut(.return, modifiers: [])
         }
         .opacity(0)
         .frame(width: 0, height: 0)
@@ -389,6 +400,11 @@ struct ReviewView: View {
             _ = deck.undo()
         }
         Haptics.disarm()
+    }
+
+    private func openEditor() {
+        guard deck.current != nil, !holding else { return }
+        editing = EditorTarget(items: deck.items, index: deck.idx)
     }
 
     private func fire(_ kind: BurstKind, strength: Int = 1) {

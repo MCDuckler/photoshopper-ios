@@ -10,6 +10,8 @@ struct LibraryView: View {
     @State private var toast: String?
     @State private var pinchBase: CGFloat = 120
     @State private var showAlbumPicker = false
+    @State private var presets: [Preset] = []
+    @State private var confirmClear = false
     private let gap: CGFloat = 6
 
     var body: some View {
@@ -55,7 +57,11 @@ struct LibraryView: View {
         }
         .task {
             if lib.items.isEmpty { await lib.loadMeta(app.api); await lib.reload(app.api) }
+            if presets.isEmpty, let p = try? await app.api?.presets() { presets = p }
         }
+        .confirmationDialog("Reset edits?", isPresented: $confirmClear, titleVisibility: .visible) {
+            Button("Reset \(lib.selected.count) Photos", role: .destructive) { Task { await batch(mode: "clear", done: "back to original") } }
+        } message: { Text("Removes every adjustment from the selected photos.") }
     }
 
     // MARK: grid
@@ -168,6 +174,14 @@ struct LibraryView: View {
                     Button("Clear rating") { rateSelection(0) }
                     Button("Reject", role: .destructive) { rateSelection(-1) }
                 } label: { Label("Rate", systemImage: "star") }
+                Menu {
+                    Button { Task { await batchPaste() } } label: { Label("Paste Edits", systemImage: "doc.on.clipboard") }
+                        .disabled(EditClipboard.value == nil)
+                    Menu {
+                        ForEach(presets) { p in Button(p.name) { Task { await batch(mode: "preset", presetID: p.id, done: "\(p.name) applied") } } }
+                    } label: { Label("Apply Preset", systemImage: "square.stack.3d.down.right") }
+                    Button(role: .destructive) { confirmClear = true } label: { Label("Reset Edits", systemImage: "arrow.counterclockwise") }
+                } label: { Label("Edits", systemImage: "slider.horizontal.3") }
                 Spacer()
             }
             .font(.custom("Helvetica Neue", size: 13).weight(.medium))
@@ -197,6 +211,24 @@ struct LibraryView: View {
     }
 
     private func ordered(_ ids: Set<String>) -> [String] { lib.items.map(\.id).filter { ids.contains($0) } }
+
+    private func batchPaste() async {
+        guard let clip = EditClipboard.value else { return }
+        await batch(mode: "merge", recipe: Recipe(server: .object(clip)).json, fields: Array(clip.keys), done: "Edits pasted")
+    }
+
+    private func batch(mode: String, presetID: Int? = nil, recipe: JSONValue? = nil, fields: [String]? = nil, done: String) async {
+        guard let api = app.api else { return }
+        let ids = ordered(lib.selected)
+        do {
+            try await api.batchEdits(ids, mode: mode, presetID: presetID, recipe: recipe, fields: fields)
+            let now = Date().timeIntervalSince1970
+            for id in ids { Outbox.shared.announce(.edited(id, mode != "clear", now)) }
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            flash("\(ids.count) · \(done)")
+            lib.endSelection()
+        } catch { flash(error.localizedDescription) }
+    }
 
     private func rateSelection(_ r: Int) {
         let ids = ordered(lib.selected)

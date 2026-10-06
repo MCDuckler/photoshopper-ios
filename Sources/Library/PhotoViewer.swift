@@ -11,6 +11,7 @@ struct PhotoViewer: View {
     @State private var zoom: CGFloat = 1
     @State private var busy = false
     @State private var albumFor: PickerTarget?
+    @State private var editing: EditorTarget?
 
     private var item: PhotoItem? { lib.items.indices.contains(index) ? lib.items[index] : nil }
 
@@ -39,6 +40,9 @@ struct PhotoViewer: View {
                 .onAppear { prefetch() }
                 .onChange(of: index) { _, _ in prefetch() }
                 .sheet(item: $albumFor) { t in AlbumPicker(photoIDs: [t.id]) { flash($0) }.environmentObject(app) }
+                .fullScreenCover(item: $editing) { t in
+                    if let api = app.api { EditorView(api: api, items: t.items, index: t.index).environmentObject(app) }
+                }
             }
         }
     }
@@ -51,6 +55,9 @@ struct PhotoViewer: View {
                     .font(.custom("Helvetica Neue", size: 11)).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer()
+            Button { editing = EditorTarget(items: lib.items, index: index) } label: { Image(systemName: "slider.horizontal.3") }
+                .accessibilityLabel("Edit")
+                .padding(.trailing, 14)
             Button { albumFor = PickerTarget(id: p.id) } label: { Image(systemName: "rectangle.stack.badge.plus") }
                 .accessibilityLabel("Albums")
                 .padding(.trailing, 14)

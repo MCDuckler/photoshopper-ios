@@ -93,6 +93,9 @@ final class Outbox: ObservableObject {
         enqueue(op, .edited(id, false, op.ts))
     }
 
+    /// Tell every screen about a write that already reached the server directly.
+    func announce(_ change: LocalChange) { changes.send(change) }
+
     private func enqueue(_ op: Op, _ change: LocalChange) {
         ops.append(op)
         save()

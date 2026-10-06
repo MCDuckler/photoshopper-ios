@@ -50,3 +50,19 @@ enum JSONValue: Codable, Equatable, Hashable {
         }
     }
 }
+
+extension JSONValue: ExpressibleByIntegerLiteral, ExpressibleByFloatLiteral, ExpressibleByStringLiteral,
+                     ExpressibleByBooleanLiteral, ExpressibleByArrayLiteral, ExpressibleByDictionaryLiteral {
+    init(integerLiteral v: Int) { self = .number(Double(v)) }
+    init(floatLiteral v: Double) { self = .number(v) }
+    init(stringLiteral v: String) { self = .string(v) }
+    init(booleanLiteral v: Bool) { self = .bool(v) }
+    init(arrayLiteral v: JSONValue...) { self = .array(v) }
+    init(dictionaryLiteral v: (String, JSONValue)...) { self = .object(Dictionary(v, uniquingKeysWith: { _, b in b })) }
+}
+
+extension JSONValue {
+    /// Compact JSON text (for clipboard storage and query parameters).
+    var data: Data { (try? JSONEncoder().encode(self)) ?? Data("null".utf8) }
+    static func decode(_ d: Data) -> JSONValue? { try? JSONDecoder().decode(JSONValue.self, from: d) }
+}
